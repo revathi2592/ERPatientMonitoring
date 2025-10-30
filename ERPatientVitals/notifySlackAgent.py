@@ -1,7 +1,5 @@
 from flask import Flask, request, jsonify
-import json
-import os
-import requests
+import json, os, requests, base64
 
 app = Flask(__name__)
 
@@ -14,12 +12,19 @@ def receive_pubsub():
         return "Invalid Pub/Sub message", 400
 
     message = envelope["message"]
-    data = json.loads(message.get("data", "{}").encode("utf-8").decode("utf-8"))
+
+    # ✅ Decode Pub/Sub message properly
+    try:
+        data_str = base64.b64decode(message.get("data", "")).decode("utf-8")
+        data = json.loads(data_str)
+    except Exception as e:
+        print("Decode error:", e)
+        return "Bad message format", 400
 
     heart_rate = data.get("heart_rate", 0)
     oxygen = data.get("oxygen_level", 100)
 
-    if heart_rate <60 or oxygen < 90:
+    if heart_rate > 130 or oxygen < 90:
         slack_message = {
             "text": f"🚨 High Risk Alert for {data['patient_id']}!\n"
                     f"HR: {heart_rate}, O₂: {oxygen}, BP: {data['bp_systolic']}/{data['bp_diastolic']} "
@@ -29,6 +34,3 @@ def receive_pubsub():
         print(f"Notified Slack for {data['patient_id']}")
 
     return jsonify({"status": "ok"})
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
