@@ -24,7 +24,7 @@ def receive_pubsub():
     heart_rate = data.get("heart_rate", 0)
     oxygen = data.get("oxygen_level", 100)
 
-    if heart_rate > 130 or oxygen < 90:
+    if heart_rate > 130 or oxygen < 80:
         slack_message = {
             "text": f"🚨 High Risk Alert for {data['patient_id']}!\n"
                     f"HR: {heart_rate}, O₂: {oxygen}, BP: {data['bp_systolic']}/{data['bp_diastolic']} "
