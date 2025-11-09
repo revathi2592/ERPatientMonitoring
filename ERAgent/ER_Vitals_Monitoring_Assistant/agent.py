@@ -554,51 +554,61 @@ class UploaderAgent:
         
         print(f"✅ Uploaded {filename} to gs://{GCS_BUCKET}/{filename}")
         
-        # Make the blob publicly readable (temporary access)
-        blob.make_public()
+        # Generate a signed URL for temporary access (works with Uniform Bucket-Level Access)
+        # URL valid for 1 hour
+        from datetime import timedelta
+        signed_url = blob.generate_signed_url(
+            version="v4",
+            expiration=timedelta(hours=1),
+            method="GET"
+        )
         
-        # Return the public URL
-        public_url = blob.public_url
-        print(f"🔗 Public URL: {public_url}")
+        print(f"🔗 Signed URL (valid 1 hour): {signed_url}")
         
-        return public_url
+        return signed_url
  
 # ---------- Multi-Agent Workflow ----------
 def classify_query_type(query: str) -> str:
     """
+    Fast rule-based classification with LLM fallback.
     Uses Gemini to decide whether the query should use SQL (analytical)
     or Embedding-based semantic search.
     Returns: "sql" or "embedding"
     """
+    query_lower = query.lower()
+    
+    # Fast rule-based classification for common patterns
+    # SQL indicators - specific data retrieval
+    sql_keywords = [
+        "latest", "recent", "last", "show", "get", "readings", "vitals",
+        "patient p", "patient id", "how many", "count", "average", "sum",
+        "maximum", "minimum", "list", "all patients", "report", "pdf",
+        "conditions", "effects", "diagnosis", "potential"
+    ]
+    
+    # Embedding indicators - semantic/similarity search
+    embedding_keywords = [
+        "similar", "like", "find patients", "trends", "patterns",
+        "compare between", "which patients", "search for"
+    ]
+    
+    # Check for SQL patterns first (most common)
+    if any(keyword in query_lower for keyword in sql_keywords):
+        return "sql"
+    
+    # Check for embedding patterns
+    if any(keyword in query_lower for keyword in embedding_keywords):
+        return "embedding"
+    
+    # Fallback to LLM for ambiguous queries (rare case)
+    print("⚠️ Using LLM for query classification (ambiguous query)")
     model = GenerativeModel("gemini-2.0-flash")
     prompt = f"""
     You are a classifier. Based on the user's query, decide the most suitable retrieval method.
  
     Return exactly one word: "sql" or "embedding".
-    Below is the table schema:
-    field name	        type
-    patient_id	        STRING
-    timestamp	        TIMESTAMP
-    heart_rate	        INTEGER
-    bp_systolic	        INTEGER
-    bp_diastolic	    INTEGER
-    oxygen_level	    INTEGER
-    ward	            STRING
-    risk_score	        FLOAT
-    status	            STRING
-    meta	            STRING
-    patient_notes	    STRING
-
-    - Use "sql" for analytical, statistical, or aggregate queries that can be answered with the table columns above (e.g., latest, count, average, min/max, list of patients, show readings, report generation).
-    - Use "embedding" for:
-      * Descriptive, similarity-based, or record-level queries (e.g., find similar patients, recent patient trends)
-      * Questions about "effects", "conditions", "potential effects", "diagnosis" (these require retrieving patient data first)
- 
-    Example:
-    Query: "How many patients were admitted today?" → sql
-    Query: "compare the readings between patient1 and patient2" → embedding
-    Query: "what are the potential effects for patient P100" → sql (retrieve patient data first)
-    Query: "show conditions for this patient" → sql (retrieve patient data first)
+    - Use "sql" for specific data retrieval, analytical queries, or patient-specific questions
+    - Use "embedding" for similarity-based or semantic searches
  
     Query: {query}
     """
@@ -1107,13 +1117,13 @@ root_agent = Agent(
     name="ER_Vitals_Monitoring_MultiAgent",
     model="gemini-2.0-flash",
     description="""👋 Hello! I'm the ER Patient Vital Monitoring Assistant for City Hospital.
-
-I can help you with:
-🔍 Query patient vital signs and readings
-📊 Analyze patient data and trends
-🏥 Identify potential medical conditions based on vitals
-📈 Generate visual graphs of patient vitals over time
-📄 Create comprehensive PDF reports with analysis
+Start the conversation by saying 
+    I can help you with:
+    🔍 Query patient vital signs and readings
+    📊 Analyze patient data and trends
+    🏥 Identify potential medical conditions based on vitals
+    📈 Generate visual graphs of patient vitals over time
+    📄 Create comprehensive PDF reports with analysis
 
 You can ask me questions like:
 • 'Show me the latest readings for patient P100'
