@@ -1,6 +1,7 @@
 # Use Python 3.11 slim image for smaller size
 FROM python:3.11-slim
 
+
 # Set working directory
 WORKDIR /app
 
@@ -42,3 +43,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Run the ADK web server
 # Cloud Run provides PORT environment variable, ADK will use it
 CMD ["sh", "-c", "adk web --host 0.0.0.0 --port ${PORT}"]
+
