@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file from the agent directory
-COPY ER_Vitals_Monitoring_Assistant/requirements.txt .
+COPY ERAgent/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
@@ -42,3 +42,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Run the ADK web server
 # Cloud Run provides PORT environment variable, ADK will use it
 CMD ["sh", "-c", "adk web --host 0.0.0.0 --port ${PORT}"]
+
