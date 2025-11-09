@@ -138,14 +138,22 @@ def generate_sql_from_nl(query_text: str) -> str:
     meta STRING,
     patient_notes STRING
  
-    If the query asks for a *report* or *pdf*, ignore those words and still generate a valid SQL query 
-    that retrieves the relevant data.
+    IMPORTANT INSTRUCTIONS:
+    - If the query asks for "effects", "conditions", "potential effects", or "diagnosis", convert it to retrieve the patient's vital signs data instead.
+    - If the query asks for a *report* or *pdf*, ignore those words and still generate a valid SQL query that retrieves the relevant data.
+    - For patient-specific queries, use WHERE patient_id = 'PXXX' and ORDER BY timestamp DESC to get the latest readings.
  
     Output only the SQL statement — no explanation, no markdown formatting.
  
-    Example:
+    Examples:
     Q: Give me the readings of patient P100 in a pdf report
-    A: SELECT * FROM `{PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE}` WHERE patient_id = 'P100' ORDER BY timestamp DESC;
+    A: SELECT * FROM `{PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE}` WHERE patient_id = 'P100' ORDER BY timestamp DESC LIMIT 10;
+    
+    Q: what are the potential effects for patient P100
+    A: SELECT * FROM `{PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE}` WHERE patient_id = 'P100' ORDER BY timestamp DESC LIMIT 10;
+    
+    Q: show me conditions for patient P105
+    A: SELECT * FROM `{PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE}` WHERE patient_id = 'P105' ORDER BY timestamp DESC LIMIT 10;
  
     Query: {query_text}
     """
@@ -584,12 +592,16 @@ def classify_query_type(query: str) -> str:
     meta	            STRING
     patient_notes	    STRING
 
-    - Use "sql" for analytical, statistical, or aggregate queries (e.g., latest, count, average, min/max, list of patients, show readings, report generation).
-    - Use "embedding" for descriptive, similarity-based, or record-level queries (e.g., find similar patients, recent patient trends).
+    - Use "sql" for analytical, statistical, or aggregate queries that can be answered with the table columns above (e.g., latest, count, average, min/max, list of patients, show readings, report generation).
+    - Use "embedding" for:
+      * Descriptive, similarity-based, or record-level queries (e.g., find similar patients, recent patient trends)
+      * Questions about "effects", "conditions", "potential effects", "diagnosis" (these require retrieving patient data first)
  
     Example:
     Query: "How many patients were admitted today?" → sql
     Query: "compare the readings between patient1 and patient2" → embedding
+    Query: "what are the potential effects for patient P100" → sql (retrieve patient data first)
+    Query: "show conditions for this patient" → sql (retrieve patient data first)
  
     Query: {query}
     """
@@ -602,36 +614,56 @@ def classify_query_type(query: str) -> str:
 
 class RetrievalAgent:
 
-    def summarize_results(self,query: str, df):
+    def summarize_results(self, query: str, df):
         """
         Uses LLM to create a natural language summary of query results.
         """
         model = GenerativeModel("gemini-2.0-flash")
     
+        # Check if query is asking about effects/conditions
+        effects_keywords = ["effect", "condition", "diagnosis", "potential effect"]
+        is_effects_query = any(keyword in query.lower() for keyword in effects_keywords)
+        
         # Convert small DataFrames to markdown for readable context
         if not df.empty and len(df) <= 20:
             table_preview = df.to_markdown(index=False)
         else:
             table_preview = "The table contains many rows."
     
-        prompt = f"""
-        You are a data analyst helping summarize query results for hospital management.
-        Do not include embedding column in the results.
-    
-        Here is the original question:
-        {query}
-    
-        Here are the query results:
-        {table_preview}
-    
-        Write a short, clear, human-friendly summary answering the user's question.
-        Example:
-        Question: How many patients are there?
-        Result: 120
-        Answer: There are 120 patients currently in the hospital.
-    
-        Provide only the summary sentence.
-        """
+        if is_effects_query:
+            # For effects queries, inform that effects analysis will be performed
+            prompt = f"""
+            The user asked: {query}
+            
+            The patient's vital signs data has been retrieved successfully.
+            
+            Provide a brief summary that indicates:
+            1. The patient data has been retrieved
+            2. Effects analysis will be performed on the vital signs
+            3. Mention that clinical conditions will be identified based on the readings
+            
+            Be concise and professional.
+            """
+        else:
+            # Regular query summary
+            prompt = f"""
+            You are a data analyst helping summarize query results for hospital management.
+            Do not include embedding column in the results.
+        
+            Here is the original question:
+            {query}
+        
+            Here are the query results:
+            {table_preview}
+        
+            Write a short, clear, human-friendly summary answering the user's question.
+            Example:
+            Question: How many patients are there?
+            Result: 120
+            Answer: There are 120 patients currently in the hospital.
+        
+            Provide only the summary sentence.
+            """
     
         response = model.generate_content(prompt)
         return response.text.strip() if response and hasattr(response, "text") else "Could not summarize results."
@@ -1046,6 +1078,7 @@ def adk_tool_handle_query(user_query: str, top_k: int = TOP_K) -> Dict[str, Any]
             "summary": response.get("summary", "No summary available."),
             "matches": response.get("matches", 0),
             "analysis": response.get("analysis", {}),
+            "effects_analysis": response.get("effects_analysis", {}),
         }
         
         # Add PDF URL if available
@@ -1076,6 +1109,22 @@ def adk_tool_handle_query(user_query: str, top_k: int = TOP_K) -> Dict[str, Any]
 root_agent = Agent(
     name="ER_Vitals_Monitoring_MultiAgent",
     model="gemini-2.0-flash",
+    description="""👋 Hello! I'm the ER Patient Vital Monitoring Assistant for City Hospital.
+
+I can help you with:
+🔍 Query patient vital signs and readings
+📊 Analyze patient data and trends
+🏥 Identify potential medical conditions based on vitals
+📈 Generate visual graphs of patient vitals over time
+📄 Create comprehensive PDF reports with analysis
+
+You can ask me questions like:
+• 'Show me the latest readings for patient P100'
+• 'What are the potential effects of these readings?'
+• 'Generate a PDF report for patient P105'
+• 'Compare vitals between patients'
+
+How can I assist you today?""",
     instruction="""
 You are an Emergency Room Data Intelligence Assistant integrated with BigQuery.
 
@@ -1084,13 +1133,13 @@ Your primary task is to invoke the adk_tool_handle_query tool for ALL patient-re
 IMPORTANT RULES:
 1. **Always pass the user's EXACT query text** to the tool, including keywords like:
    - "pdf", "report", "graph", "chart", "download", "export", "file"
-   - "condition", "effects", "diagnosis", "risk"
-   - These keywords trigger automatic PDF generation with graphs
+   - "condition", "effects", "diagnosis", "risk", "potential effects"
+   - These keywords trigger automatic analysis and PDF generation
    
 2. The tool automatically:
    - Retrieves patient data from BigQuery
    - Generates statistical analysis of vital signs
-   - Analyzes conditions and potential effects based on vital readings
+   - **Analyzes conditions and potential effects** based on vital readings
    - Identifies clinical conditions (e.g., Bradycardia, Hypertension, Hypoxemia)
    - Creates time-series graphs of vitals (heart rate, BP, oxygen, etc.)
    - Produces professional PDF reports when requested (with effects analysis)
@@ -1098,23 +1147,36 @@ IMPORTANT RULES:
 
 3. **Never paraphrase or modify the user's query** - pass it exactly as given
 
-4. When the tool returns:
-   - effects_analysis: Present the identified conditions and potential effects
-   - pdf_report_url: Provide the download link to the user
+4. **When the tool returns effects_analysis**, present it clearly:
+   - Show the vitals that were analyzed
+   - List each identified condition with its potential effects
+   - If no conditions found, state that the vitals are within normal ranges
+   - Example format:
+     "Based on the analysis of Patient P100's vitals:
+     - Heart Rate: 83 bpm
+     - Blood Pressure: 149/83 mmHg
+     - Oxygen Level: 92%
+     
+     Identified Conditions:
+     1. Stage 1 Hypertension - Potential Effects: Increased cardiovascular risk, may require lifestyle modifications
+     2. Mild Hypoxemia - Potential Effects: Reduced oxygen delivery to tissues, may cause fatigue"
+
+5. When the tool returns:
    - summary: Share the natural language summary of results
+   - effects_analysis: Present the conditions and potential effects as described above
+   - pdf_report_url: Provide the download link to the user
 
 Examples:
 - User: "Show me patient P101 vitals"
   → Call tool with: "Show me patient P101 vitals"
   
-- User: "What conditions does patient P105 have based on their vitals?"
-  → Call tool with: "What conditions does patient P105 have based on their vitals?"
+- User: "What are the potential effects for this patient?"
+  → Call tool with: "What are the potential effects for this patient?"
+  → Present effects_analysis with conditions and potential effects
   
-- User: "Can you plot this into a graph and give me in a pdf"
-  → Call tool with: "Can you plot this into a graph and give me in a pdf"
-  
-- User: "Generate a report for patient P105 with potential effects"
-  → Call tool with: "Generate a report for patient P105 with potential effects"
+- User: "what conditions does patient P105 have?"
+  → Call tool with: "what conditions does patient P105 have?"
+  → Present effects_analysis clearly formatted
 """,
     tools=[adk_tool_handle_query]
 )
