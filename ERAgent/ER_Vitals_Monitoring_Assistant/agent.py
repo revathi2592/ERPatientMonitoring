@@ -36,13 +36,13 @@ import numpy as np
 from vertexai.generative_models import GenerativeModel
  
 # ---------- CONFIG ----------
-PROJECT_ID = os.environ.get("PROJECT_ID")
+PROJECT_ID = os.environ.get("PROJECT_ID", "spiritual-clock-471207-i1")
 BQ_DATASET = os.environ.get("BQ_DATASET", "your_dataset")
 BQ_TABLE = os.environ.get("BQ_TABLE", "your_table")
 EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "text-embedding-004")
 TOP_K = int(os.environ.get("TOP_K", "5"))
 VERTEX_LOCATION = os.environ.get("GOOGLE_VERTEXAI_LOCATION", "us-central1")
-GCS_BUCKET = os.environ.get("GCS_BUCKET")
+GCS_BUCKET = os.environ.get("GCS_BUCKET", "erpatientvitals")
  
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
 os.environ["GOOGLE_VERTEXAI_PROJECT"] = PROJECT_ID
@@ -822,14 +822,30 @@ class MemoryManager:
     def __init__(self, max_history: int = 5):
         self.history: List[Dict[str, Any]] = []
         self.max_history = max_history
+        self.last_patient_id = None  # Track the most recent patient ID
  
     def add_entry(self, query: str, rows: List[Dict[str, Any]], analysis: Dict[str, Any]):
+        # Extract patient_id from rows if available
+        patient_id = None
+        if rows:
+            # Try to get patient_id from first row
+            if isinstance(rows, list) and len(rows) > 0:
+                if isinstance(rows[0], dict) and "patient_id" in rows[0]:
+                    patient_id = rows[0]["patient_id"]
+        
         entry = {
             "query": query,
             "timestamp": datetime.utcnow().isoformat(),
             "rows": rows,
             "analysis": analysis,
+            "patient_id": patient_id,
         }
+        
+        # Update last_patient_id if we found one
+        if patient_id:
+            self.last_patient_id = patient_id
+            print(f"💾 Stored patient context: {patient_id}")
+        
         self.history.append(entry)
         if len(self.history) > self.max_history:
             self.history = self.history[-self.max_history:]
@@ -856,13 +872,32 @@ class MemoryManager:
         return "\n".join(summary)
  
     def get_contextual_query(self, new_query: str) -> str:
-        """Merge user’s new query with prior context."""
+        """Merge user's new query with prior context, including patient ID if referring to previous context."""
         if not self.history:
             return new_query
-        keywords = ["that", "previous", "same", "those", "earlier", "compare", "combine", "both"]
-        if any(k in new_query.lower() for k in keywords):
+        
+        # Keywords that indicate user is referring to previous context
+        contextual_keywords = ["that", "this", "these", "those", "their", "the patient", 
+                              "same", "previous", "earlier", "effects", "conditions", "readings"]
+        
+        new_query_lower = new_query.lower()
+        is_contextual = any(k in new_query_lower for k in contextual_keywords)
+        
+        # Check if the query mentions a specific patient ID
+        has_explicit_patient = any(f"p{i}" in new_query_lower or f"patient {i}" in new_query_lower 
+                                   for i in range(100, 200))
+        
+        # If contextual and no explicit patient mentioned, inject the last patient ID
+        if is_contextual and not has_explicit_patient and self.last_patient_id:
+            print(f"🔗 Contextual query detected. Linking to patient: {self.last_patient_id}")
+            # Inject patient ID into the query
+            enhanced_query = f"{new_query} for patient {self.last_patient_id}"
+            context_summary = self.summarize_context()
+            return f"{enhanced_query}\nContext from previous queries:\n{context_summary}"
+        elif any(k in new_query_lower for k in ["compare", "combine", "both"]):
             context_summary = self.summarize_context()
             return f"{new_query}\nUse the context of previous queries:\n{context_summary}"
+        
         return new_query
  
 class MainAgent:
