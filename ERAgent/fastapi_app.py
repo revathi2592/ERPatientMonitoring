@@ -109,7 +109,7 @@ You can ask me questions like:
 • 'Show me the latest readings for patient P100'
 • 'What are the potential effects of these readings?'
 • 'Generate a PDF report for patient P105'
-• 'Compare vitals between patients'
+
 
 How can I assist you today?"""
     }
@@ -121,3 +121,4 @@ if __name__ == "__main__":
     print("🚀 Starting ER Patient Vital Monitoring Assistant...")
     print("📍 Access the application at: http://localhost:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+
