@@ -1,0 +1,51 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: 
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/er-vitals-assistant:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/er-vitals-assistant:latest'
+      - '.'
+    dir: 'ERAgent'  # This sets the build context to ERAgent directory
+    timeout: '1200s'  # 20 minutes for Docker build
+  
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/er-vitals-assistant:$COMMIT_SHA']
+    timeout: '600s'
+  
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/er-vitals-assistant:latest']
+    timeout: '600s'
+  
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'er-vitals-assistant'
+      - '--image=gcr.io/$PROJECT_ID/er-vitals-assistant:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=8080'
+      - '--memory=2Gi'
+      - '--cpu=2'
+      - '--timeout=300'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--set-env-vars=PROJECT_ID=spiritual-clock-471207-i1,BQ_DATASET=patient_monitoring,BQ_TABLE=er_vitals,VERTEX_LOCATION=us-central1,GCS_BUCKET=erpatientvitals,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_VERTEXAI_PROJECT=spiritual-clock-471207-i1,GOOGLE_VERTEXAI_LOCATION=us-central1'
+    timeout: '600s'
+
+images:
+  - 'gcr.io/$PROJECT_ID/er-vitals-assistant:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/er-vitals-assistant:latest'
+
+timeout: '3600s'  # Overall build timeout: 1 hour
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'  # Use more powerful machine for faster builds
