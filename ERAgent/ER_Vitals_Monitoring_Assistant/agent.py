@@ -551,20 +551,17 @@ class UploaderAgent:
         bucket = client.bucket(GCS_BUCKET)
         blob = bucket.blob(filename)
         blob.upload_from_filename(file_path)
-        credentials,project = google.auth.default()
-        print("------------------------------------------")
-        print(client._credentials)
-        print("------------------------------------------")
- 
-        # Generate signed URL safely
-        url = blob.generate_signed_url(
-            version="v4",
-            expiration=timedelta(hours=1),
-            method="GET",
-            credentials=client._credentials,
-            service_account_email="service-643140588215@gs-project-accounts.iam.gserviceaccount.com",
-        )
-        return url
+        
+        print(f"✅ Uploaded {filename} to gs://{GCS_BUCKET}/{filename}")
+        
+        # Make the blob publicly readable (temporary access)
+        blob.make_public()
+        
+        # Return the public URL
+        public_url = blob.public_url
+        print(f"🔗 Public URL: {public_url}")
+        
+        return public_url
  
 # ---------- Multi-Agent Workflow ----------
 def classify_query_type(query: str) -> str:
