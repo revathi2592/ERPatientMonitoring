@@ -1,0 +1,22 @@
+# Google ADK and AI Platform
+google-adk>=1.17.0
+google-cloud-aiplatform
+google-cloud-bigquery
+google-cloud-storage
+google-auth
+
+# Data processing
+pandas
+numpy
+pyarrow
+db-dtypes
+google-cloud-bigquery-storage
+
+# PDF generation
+reportlab
+
+# Plotting
+matplotlib
+
+# Utilities
+tabulate
