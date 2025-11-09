@@ -554,18 +554,26 @@ class UploaderAgent:
         
         print(f"✅ Uploaded {filename} to gs://{GCS_BUCKET}/{filename}")
         
-        # Generate a signed URL for temporary access (works with Uniform Bucket-Level Access)
-        # URL valid for 1 hour
-        from datetime import timedelta
-        signed_url = blob.generate_signed_url(
-            version="v4",
-            expiration=timedelta(hours=1),
-            method="GET"
-        )
-        
-        print(f"🔗 Signed URL (valid 1 hour): {signed_url}")
-        
-        return signed_url
+        # Try to generate signed URL (requires service account key)
+        # If it fails, fall back to public URL
+        try:
+            from datetime import timedelta
+            signed_url = blob.generate_signed_url(
+                version="v4",
+                expiration=timedelta(hours=1),
+                method="GET"
+            )
+            print(f"🔗 Signed URL (valid 1 hour): {signed_url}")
+            return signed_url
+        except Exception as e:
+            print(f"⚠️ Could not generate signed URL: {e}")
+            print("📍 Returning GCS path instead")
+            # Return GCS path that can be accessed if bucket has proper IAM permissions
+            # Or you can set blob to be publicly readable via IAM (not ACL)
+            public_url = f"https://storage.googleapis.com/{GCS_BUCKET}/{filename}"
+            print(f"🔗 Public URL: {public_url}")
+            print("💡 Note: Ensure the bucket has public access or proper IAM permissions")
+            return public_url
  
 # ---------- Multi-Agent Workflow ----------
 def classify_query_type(query: str) -> str:
