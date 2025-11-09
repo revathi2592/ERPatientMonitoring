@@ -1,7 +1,6 @@
 # Use Python 3.11 slim image for smaller size
 FROM python:3.11-slim
 
-
 # Set working directory
 WORKDIR /app
 
@@ -17,15 +16,15 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file (relative to repo root: ERPatientMonitoring)
-COPY ERAgent/requirements.txt .
+# Copy requirements file (located in same directory as Dockerfile in ERAgent folder)
+COPY requirements.txt /app/requirements.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy application code (relative to repo root: ERPatientMonitoring)
-COPY ERAgent/ER_Vitals_Monitoring_Assistant/ ./ER_Vitals_Monitoring_Assistant/
+# Copy application code (same directory level as Dockerfile)
+COPY ER_Vitals_Monitoring_Assistant/ ./ER_Vitals_Monitoring_Assistant/
 
 # Copy service account key (if needed - uncomment and add the file)
 # COPY spiritual-clock-471207-i1-bd9f5d8c36f0.json /app/
@@ -43,4 +42,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Run the ADK web server
 # Cloud Run provides PORT environment variable, ADK will use it
 CMD ["sh", "-c", "adk web --host 0.0.0.0 --port ${PORT}"]
-
