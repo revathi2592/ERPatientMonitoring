@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ER Patient Vital Monitoring - City Hospital</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-heartbeat"></i>
+                    <h1>City Hospital ER Monitoring</h1>
+                </div>
+                <div class="status">
+                    <span class="status-indicator" id="statusIndicator"></span>
+                    <span id="statusText">Connected</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="container main-container">
+        <div class="layout">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-info-circle"></i> Quick Actions</h3>
+                    <button class="action-btn" onclick="insertSample('Show me the latest readings for patient P100')">
+                        <i class="fas fa-user"></i> Patient P100
+                    </button>
+                    <button class="action-btn" onclick="insertSample('What are the potential effects?')">
+                        <i class="fas fa-stethoscope"></i> Potential Effects
+                    </button>
+                    <button class="action-btn" onclick="insertSample('Generate a PDF report for patient P105')">
+                        <i class="fas fa-file-pdf"></i> Generate Report
+                    </button>
+                    <button class="action-btn" onclick="insertSample('Compare vitals between patients')">
+                        <i class="fas fa-chart-line"></i> Compare Vitals
+                    </button>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-lightbulb"></i> Tips</h3>
+                    <ul class="tips-list">
+                        <li>Ask about specific patient IDs (P100-P199)</li>
+                        <li>Request PDF reports with graphs</li>
+                        <li>Inquire about potential medical conditions</li>
+                        <li>Compare multiple patients' data</li>
+                    </ul>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Welcome Message -->
+                <div id="welcomeMessage" class="welcome-message">
+                    <div class="loading-spinner">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                </div>
+
+                <!-- Chat Container -->
+                <div class="chat-container" id="chatContainer">
+                    <!-- Messages will be dynamically inserted here -->
+                </div>
+
+                <!-- Input Area -->
+                <div class="input-area">
+                    <div class="input-wrapper">
+                        <input 
+                            type="text" 
+                            id="queryInput" 
+                            placeholder="Ask about patient vitals, conditions, or request reports..."
+                            autocomplete="off"
+                        />
+                        <button id="sendButton" onclick="sendQuery()">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    <div class="input-hint">
+                        Press Enter to send • Shift+Enter for new line
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
